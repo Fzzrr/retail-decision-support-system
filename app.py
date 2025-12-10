@@ -1,346 +1,530 @@
-# app.py
 import streamlit as st
 import pandas as pd
-import time 
+import time
+from streamlit_option_menu import option_menu
+import numpy as np
 
-# Impor fungsi kustom kita
-import preprocessing as pp
-import model_utils as mu
+# --- ERROR HANDLING UNTUK MODUL CUSTOM ---
+try:
+    import preprocessing as pp
+    import model_utils as mu
+except ImportError as e:
+    st.error(f"❌ Modul custom tidak ditemukan: {e}. Pastikan file 'preprocessing.py' dan 'model_utils.py' ada di folder yang sama.")
+    st.stop()
 
-# --- Konfigurasi Halaman & Session State ---
+# =============================================================================
+# 1. KONFIGURASI HALAMAN & SESSION STATE
+# =============================================================================
 st.set_page_config(
-    page_title="Dashboard Market Basket Analysis & ANN",
-    layout="wide"
+    page_title="MBA & ANN Dashboard",
+    page_icon="🛒",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Fungsi untuk Load CSS dari folder assets
-def loadd_css(file_path):
-    with open(file_path) as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-# Session state untuk menyimpan data dan status
-if 'data_loaded' not in st.session_state:
-    st.session_state.data_loaded = False
-if 'data' not in st.session_state:
-    st.session_state.data = None
-if 'model' not in st.session_state:
-    st.session_state.model = None
-if 'association_rules' not in st.session_state:
-    st.session_state.association_rules = None
-if 'antecedents' not in st.session_state:
-    st.session_state.antecedents = None
+# Inisialisasi Session State
+if 'data_loaded' not in st.session_state: st.session_state.data_loaded = False
+if 'data' not in st.session_state: st.session_state.data = None
+if 'model' not in st.session_state: st.session_state.model = None
+if 'association_rules' not in st.session_state: st.session_state.association_rules = None
+if 'antecedents' not in st.session_state: st.session_state.antecedents = None
+if 'key_col' not in st.session_state: st.session_state.key_col = None
+if 'product_list_col' not in st.session_state: st.session_state.product_list_col = None
+if 'demo_features' not in st.session_state: st.session_state.demo_features = None
 
 # =============================================================================
-# --- SIDEBAR (Input Pengguna) ---
+# 2. GLOBAL CSS & STYLING (HYBRID THEME: DARK SIDEBAR - LIGHT CONTENT)
 # =============================================================================
+st.markdown("""
+    <style>
+        /* --- 1. MAIN CONTENT (LIGHT THEME) --- */
+        .stApp { background-color: #eff2f6; }
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6, 
+        .stApp p, .stApp li, .stApp span, .stApp div, .stApp label { color: #31333F !important; }
 
-st.sidebar.title("Market Basket Analysis & ANN Training")
+        /* --- 2. SIDEBAR STYLING (WHITE THEME) --- */
+        [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e0e0; }
+        [data-testid="stSidebar"] * { color: #31333F !important; }
+        .sidebar-title { font-size: 22px; font-weight: 800; color: #2e7bcf !important; text-align: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #2e7bcf; }
+        .sidebar-footer { text-align: center; font-size: 12px; color: #94a3b8 !important; margin-top: 50px; }
 
-# Inisialisasi halaman aktif di session_state
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "upload"   # default halaman pertama
+        /* --- 3. INPUT & UPLOADER --- */
+        [data-testid="stFileUploader"] { background-color: #ffffff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        div[data-baseweb="select"] > div { background-color: #ffffff !important; color: #31333F !important; border: 1px solid #d1d5db !important; }
+        span[data-baseweb="tag"] { background-color: #e6f3ff !important; color: #2e7bcf !important; border: 1px solid #2e7bcf !important; font-weight: 600 !important; }
 
-# Tombol-tombol navigasi
-if st.sidebar.button("Upload & Konfigurasi Data", use_container_width=True):
-    st.session_state.current_page = "upload"
+        /* --- 4. CARDS & METRICS --- */
+        [data-testid="stMetric"] { background-color: #ffffff; padding: 15px 20px !important; border-radius: 12px; border: 1px solid #e2e8f0; border-left: 6px solid #2e7bcf; margin-right: 10px !important; margin-bottom: 10px !important; min-height: 110px !important; display: flex; flex-direction: column; justify-content: center; }
+        [data-testid="stMetricValue"] { color: #2e7bcf !important; font-size: 26px !important; font-weight: 800 !important; }
 
-if st.sidebar.button("Association Rules (ARM)", use_container_width=True):
-    st.session_state.current_page = "arm"
+        /* --- 5. HEADERS & BUTTONS --- */
+        .main-header { font-size: 30px; font-weight: 800; color: #1a202c !important; margin-bottom: 20px !important; }
+        .sub-header { font-size: 16px; color: #555 !important; background-color: white; padding: 15px; border-radius: 8px; border-left: 5px solid #ffb703; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 25px !important; }
+        div.stButton > button:first-child { background-color: #ffffff !important; border: 2px solid #2e7bcf !important; border-radius: 8px !important; padding: 0.6rem 1.2rem !important; transition: all 0.3s ease !important; }
+        div.stButton > button:first-child:hover { background-color: #2e7bcf !important; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(46, 123, 207, 0.3) !important; }
+        div.stButton > button:first-child:hover * { color: #ffffff !important; }
+        div.stButton > button:first-child * { color: #2e7bcf !important; font-weight: 700 !important; font-size: 16px !important; }
+    </style>
+""", unsafe_allow_html=True)
 
-if st.sidebar.button("Train & Evaluasi ANN", use_container_width=True):
-    st.session_state.current_page = "ann"
-
-if st.sidebar.button("Lihat Hasil Prediksi", use_container_width=True):
-    st.session_state.current_page = "results"
+# =============================================================================
+# 3. SIDEBAR NAVIGATION
+# =============================================================================
+with st.sidebar:
+    st.markdown('<div class="sidebar-title">🛒 Market Basket<br>& Neural Network</div>', unsafe_allow_html=True)
     
-page = st.session_state.current_page
-
-# Main Area berdasarkan halaman aktif
-
-if page == "upload":
-    st.header("Upload & Konfigurasi Data")
-
-    uploaded_file = st.file_uploader("Upload file CSV (Gabungan)", type="csv")
-
-    # Load + preprocess data sekali saja
-    if uploaded_file and not st.session_state.data_loaded:
-        with st.spinner("Memuat dan membersihkan data..."):
-            data = pp.load_and_preprocess_data(uploaded_file)
-            st.session_state.data = data
-            st.session_state.data_loaded = True
-        st.success("Data berhasil dimuat!")
-
-    if not st.session_state.data_loaded:
-        st.info("Silakan upload file CSV untuk memulai.")
+    selected_page = option_menu(
+        menu_title=None,
+        options=["Upload Data", "Association Rules", "ANN Training", "Prediction Results", "Business Insights"],
+        icons=["cloud-upload", "diagram-3", "cpu", "graph-up-arrow", "lightbulb"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#2e7bcf", "font-size": "18px"}, 
+            "nav-link": {"font-size": "15px", "text-align": "left", "margin": "5px", "color": "#475569", "font-weight": "500"},
+            "nav-link-selected": {"background-color": "#e0f2fe", "color": "#0284c7", "font-weight": "bold", "border-left": "4px solid #0284c7"},
+        }
+    )
+    
+    st.markdown("---")
+    if st.session_state.data_loaded:
+        st.success(f"✅ Data Ready\n\nRows: {st.session_state.data.shape[0]}")
     else:
-        df = st.session_state.data
-        st.subheader("Preview Data")
-        st.dataframe(df.head(100))
+        st.info("ℹ️ Menunggu Data")
+    st.markdown('<div class="sidebar-footer">© 2025 Project Dashboard</div>', unsafe_allow_html=True)
 
+# =============================================================================
+# 4. HALAMAN UTAMA (LOGIC)
+# =============================================================================
+
+# --- PAGE 1: UPLOAD DATA ---
+if selected_page == "Upload Data":
+    st.markdown('<div class="main-header">📂 Data Setup & Configuration</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Mulai analisis Anda dengan mengunggah dataset transaksi dan memetakan variabel kunci.</div>', unsafe_allow_html=True)
+
+    uploaded_file = st.file_uploader("Upload File CSV", type="csv", label_visibility="collapsed")
+
+    if uploaded_file and not st.session_state.data_loaded:
+        with st.spinner("🔄 Membaca dan memproses dataset..."):
+            try:
+                data = pp.load_and_preprocess_data(uploaded_file)
+                st.session_state.data = data
+                st.session_state.data_loaded = True
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Gagal memuat file: {e}")
+
+    if st.session_state.data_loaded:
+        df = st.session_state.data
         all_columns = df.columns.tolist()
 
-        # Helper untuk default kolom
-        def find_default(cols, names):
-            for name in names:
-                if name in cols:
-                    return cols.index(name)
-            return 0  # default ke kolom pertama
+        col1, col2, col3, col4 = st.columns(4, gap="large")
+        col1.metric("Total Transaksi", f"{df.shape[0]:,}")
+        col2.metric("Jumlah Fitur", f"{df.shape[1]}")
+        col3.metric("Ukuran Memori", f"{df.memory_usage(deep=True).sum()/1024**2:.2f} MB")
+        col4.metric("Status", "✅ Active")
 
-        # Pilih kolom kunci & list produk
-        st.subheader("Konfigurasi Kolom Utama")
-        key_col = st.selectbox(
-            "Kolom Kunci (ID Customer/Household)", 
-            all_columns, 
-            index=find_default(all_columns, ['customer_id', 'household_key', 'user_id'])
-        )
-        product_list_col = st.selectbox(
-            "Kolom List Produk (harus format string list)", 
-            all_columns, 
-            index=find_default(all_columns, ['product_list', 'products', 'items'])
-        )
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tentukan fitur demografi
-        numeric_ids = ['basket_id', 'BASKET_ID', 'transaction_id'] 
-        exclude_cols = [key_col, product_list_col, 'PX'] + numeric_ids
+        c1, c2 = st.columns([1, 1], gap="large")
 
-        available_features = [
-            col for col in all_columns 
-            if col not in exclude_cols
-        ]
+        # --- PERBAIKAN: Update nama kolom default ke Bahasa Indonesia ---
+        def find_idx(cols, candidates):
+            for c in candidates:
+                if c in cols: return cols.index(c)
+            return 0
 
-        st.subheader("Pilih Fitur Demografi/Profiling untuk Training")
-        demo_features = st.multiselect(
-            "Fitur yang akan digunakan untuk training:", 
-            available_features, 
-            default=available_features
-        )
+        with c1:
+            st.info("🛠️ **Mapping Kolom**")
+            with st.container(border=True):
+                st.caption("Tentukan kolom identitas & produk.")
+                # Tambahkan 'ID Pelanggan' ke daftar pencarian
+                key_col = st.selectbox("Customer ID / Transaksi", all_columns, 
+                                     index=find_idx(all_columns, ['ID Pelanggan', 'household_key', 'user_id', 'basket_id']))
+                # Tambahkan 'Keranjang Belanja' ke daftar pencarian
+                product_list_col = st.selectbox("List Produk (Items)", all_columns, 
+                                              index=find_idx(all_columns, ['Keranjang Belanja', 'product_list', 'items', 'products']))
+                
+                if df[product_list_col].dtype == 'object':
+                    st.success("Format kolom produk valid.", icon="✔️")
+                else:
+                    st.warning("Kolom produk bukan string.", icon="⚠️")
 
-        # Simpan ke session_state untuk dipakai di halaman lain
-        st.session_state.key_col = key_col
-        st.session_state.product_list_col = product_list_col
-        st.session_state.demo_features = demo_features
+        with c2:
+            st.success("🤖 **Fitur AI / Demografi**")
+            with st.container(border=True):
+                st.caption("Pilih fitur untuk input Neural Network.")
+                # Filter kolom ID agar tidak masuk ke training (PENTING untuk performa)
+                exclude_keywords = ['ID', 'id', 'key', 'KEY', 'PX']
+                exclude_cols = [c for c in all_columns if any(k in c for k in exclude_keywords)] + [key_col, product_list_col]
+                
+                avail = [c for c in all_columns if c not in exclude_cols]
+                
+                demo_features = st.multiselect("Pilih Variabel:", avail, default=avail[:5] if avail else None)
+                
+                if demo_features: st.caption(f"Model akan belajar dari **{len(demo_features)}** fitur.")
+                else: st.caption("⚠️ Minimal pilih 1 fitur.")
 
-        st.success("Konfigurasi kolom tersimpan. Lanjut ke halaman 'Association Rules (ARM)'.")
+        st.markdown("<br>", unsafe_allow_html=True)
+        _, col_btn, _ = st.columns([1, 2, 1])
+        with col_btn:
+            if st.button("Simpan Konfigurasi & Lanjut ➡️", use_container_width=True):
+                if not demo_features:
+                    st.toast("Harap pilih fitur demografi!", icon="🚫")
+                else:
+                    st.session_state.key_col = key_col
+                    st.session_state.product_list_col = product_list_col
+                    st.session_state.demo_features = demo_features
+                    st.toast("Konfigurasi tersimpan!", icon="💾")
+                    time.sleep(1)
+        
+        with st.expander("🔍 Lihat Sampel Data Mentah"):
+            st.dataframe(df.head(10), use_container_width=True)
 
-elif page == "arm":
-    st.header("Association Rules (ARM)")
-    if not st.session_state.data_loaded:
-        st.warning("Silahkan upload data terlebih dahulu di halaman Upload & Konfigurasi Data")
-    elif st.session_state.product_list_col is None:
-        st.warning("Kolom list produk belum dikonfigurasi. Kembali ke halaman 'Upload & Konfigurasi Data'.")
+# --- PAGE 2: ASSOCIATION RULES ---
+elif selected_page == "Association Rules":
+    st.markdown('<div class="main-header">🔗 Association Rules Mining</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Temukan pola pembelian bersamaan menggunakan algoritma FP-Growth.</div>', unsafe_allow_html=True)
+
+    if not st.session_state.data_loaded or not st.session_state.product_list_col:
+        st.warning("⚠️ Silakan upload data dan simpan konfigurasi di halaman pertama.")
     else:
-        df = st.session_state.data
-        product_list_col = st.session_state.product_list_col
+        with st.container(border=True):
+            col_param, col_act = st.columns([3, 1])
+            with col_param:
+                min_support_val = st.slider("Minimum Support", 0.001, 0.1, 0.01, 0.001, format="%.3f")
+            with col_act:
+                st.markdown("<br>", unsafe_allow_html=True)
+                run_arm = st.button("Jalankan Analisis", use_container_width=True)
 
-        st.subheader("Pengaturan ARM (FPGrowth)")
-        min_support_val = st.slider(
-            "Minimum Support FPGrowth", 
-            min_value=0.001, 
-            max_value=0.1, 
-            value=0.01, 
-            step=0.001,
-            format="%.3f",
-            help="Support yang lebih rendah = lebih banyak rules, tapi bisa lebih lama."
-        )
+        if run_arm:
+            with st.spinner("⏳ Menjalankan FP-Growth..."):
+                try:
+                    df = st.session_state.data
+                    p_col = st.session_state.product_list_col
+                    
+                    data_arm = pp.convert_product_list(df.copy(), p_col)
+                    rules, antecedents = pp.run_association_rules(data_arm, p_col, min_support=min_support_val)
+                    
+                    st.session_state.association_rules = rules
+                    st.session_state.antecedents = antecedents
+                    st.success("✅ Selesai!")
+                except Exception as e:
+                    st.error(f"Error ARM: {e}")
 
-        if st.button("Jalankan Association Rules (ARM)", type="primary"):
-            with st.spinner(f"Mengonversi kolom '{product_list_col}'..."):
-                data_processed_arm = pp.convert_product_list(df.copy(), product_list_col)
-            
-            with st.spinner(f"Menjalankan FPGrowth (min_support={min_support_val})..."):
-                rules, antecedents = pp.run_association_rules(
-                    data_processed_arm, 
-                    product_list_col, 
-                    min_support=min_support_val
-                )
-                st.session_state.association_rules = rules
-                st.session_state.antecedents = antecedents
-                st.success("Association Rules selesai!")
+        # ... (Kode tombol 'Jalankan Analisis' di atas tetap sama) ...
 
-        # Tampilkan hasil ARM jika sudah ada
+        # Hasil Table (Versi Ramah Pengguna)
         if st.session_state.association_rules is not None:
             rules = st.session_state.association_rules
-            st.subheader("Hasil Langkah 1: Association Rules (ARM)")
-            if rules.empty:
-                st.warning("Tidak ada rules yang ditemukan dengan pengaturan support saat ini.")
-            else:
-                st.info(
-                    f"Ditemukan {len(rules)} aturan menarik. "
-                    "Gunakan tabel ini untuk menentukan target ANN Anda (halaman 'Train & Evaluasi ANN')."
-                )
-                display_cols = [
-                    'antecedents_str', 
-                    'consequents_str', 
-                    'support', 
-                    'confidence', 
-                    'lift'
-                ]
-                valid_cols = [col for col in display_cols if col in rules.columns]
-                st.dataframe(rules[valid_cols])
+            
+            st.markdown("### 📊 Pola Belanja yang Ditemukan")
+            st.success(f"Berhasil menemukan **{len(rules)}** pola kebiasaan pelanggan.")
+            
+            # --- KONVERSI KE BAHASA AWAM ---
+            
+            # 1. Ambil kolom yang relevan
+            cols_to_show = ['antecedents_str', 'consequents_str', 'support', 'confidence', 'lift']
+            # Pastikan kolom ada sebelum diambil
+            valid_cols = [c for c in cols_to_show if c in rules.columns]
+            
+            # 2. Buat copy dataframe khusus untuk tampilan (agar data asli tidak rusak)
+            display_df = rules[valid_cols].copy()
+            
+            # 3. Ganti Nama Kolom Menjadi Kalimat yang Dimengerti
+            rename_map = {
+                'antecedents_str': 'Jika Pelanggan Membeli...',
+                'consequents_str': '...Maka Cenderung Membeli',
+                'support': 'Popularitas (%)',
+                'confidence': 'Peluang Beli (%)',
+                'lift': 'Kekuatan Hubungan (x Kali)'
+            }
+            display_df.rename(columns=rename_map, inplace=True)
+            
+            # 4. Format Angka (Opsional, tapi sangat disarankan agar cantik)
+            # Ubah 0.15 jadi 15.0%
+            if 'Popularitas (%)' in display_df.columns:
+                display_df['Popularitas (%)'] = (display_df['Popularitas (%)'] * 100).round(2).astype(str) + '%'
+                
+            # Ubah 0.85 jadi 85.0%
+            if 'Peluang Beli (%)' in display_df.columns:
+                display_df['Peluang Beli (%)'] = (display_df['Peluang Beli (%)'] * 100).round(1).astype(str) + '%'
+            
+            # Ubah 2.5 jadi 2.5x
+            if 'Kekuatan Hubungan (x Kali)' in display_df.columns:
+                display_df['Kekuatan Hubungan (x Kali)'] = display_df['Kekuatan Hubungan (x Kali)'].round(2).astype(str) + 'x'
 
-elif page == "ann":
-    
-    st.header("ANN & Train Model")
-    
-    if not st.session_state.data_loaded:
-        st.warning("Silahkan upload data terlebih dahulu di halaman Upload & Konfigurasi Data")
-    elif st.session_state.key_col is None or st.session_state.product_list_col is None:
-        st.warning("Konfigurasi kolom belum lengkap. Kembali ke halaman 'Upload & Konfigurasi Data'.")
-    elif st.session_state.demo_features is None or len(st.session_state.demo_features) == 0:
-        st.warning("Fitur demografi belum dipilih. Kembali ke halaman 'Upload & Konfigurasi Data'.")
+            # 5. Tampilkan Tabel
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # 6. Tambahkan "Kamus" untuk Edukasi User
+            with st.expander("📚 Cara Membaca Tabel Ini (Klik untuk Info)"):
+                st.markdown("""
+                * **Jika Pelanggan Membeli...**: Barang pemicu yang sudah ada di keranjang.
+                * **...Maka Cenderung Membeli**: Barang rekomendasi yang cocok ditawarkan.
+                * **Popularitas**: Seberapa sering pasangan ini muncul (Semakin tinggi = Barang pasaran).
+                * **Peluang Beli**: Seberapa yakin kita dia akan membeli barang rekomendasi tersebut (Misal 80% = Sangat Yakin).
+                * **Kekuatan Hubungan**: 
+                    * **> 1.0x**: Hubungan kuat (Cocok untuk Paket Bundling).
+                    * **1.0x**: Kebetulan saja.
+                """)
+                
+# --- PAGE 3: ANN TRAINING ---
+elif selected_page == "ANN Training":
+    st.markdown('<div class="main-header">🧠 Neural Network Training</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Latih model AI untuk memprediksi probabilitas pembelian barang target.</div>', unsafe_allow_html=True)
+
+    if not st.session_state.data_loaded or not st.session_state.demo_features:
+        st.warning("⚠️ Konfigurasi data belum lengkap. Silakan kembali ke halaman Upload.")
     else:
-        df = st.session_state.data
-        key_col = st.session_state.key_col
-        product_list_col = st.session_state.product_list_col
-        demo_features = st.session_state.demo_features
+        c1, c2 = st.columns([1, 1], gap="large")
+        
+        with c1:
+            st.info("🎯 **Target Prediksi**")
+            with st.container(border=True):
+                ant_opts = [""] + (st.session_state.antecedents if st.session_state.antecedents else [])
+                sel_ant = st.selectbox("Pilih dari pola populer (Opsional):", ant_opts)
+                
+                target_str = st.text_input("Atau ketik Produk Target (koma separator):", value=sel_ant if sel_ant else "")
+                target_list = set(p.strip().upper() for p in target_str.split(',') if p)
 
-        st.info("Pilih target berdasarkan hasil ARM (halaman 2), lalu masukkan di bawah.")
+        with c2:
+            st.success("⚙️ **Parameter Model**")
+            with st.container(border=True):
+                resample = st.selectbox("Penanganan Data Tidak Seimbang:", 
+                                      ['oversampling', 'undersampling'], 
+                                      format_func=lambda x: "SMOTE (Oversampling) - Recommended" if x == 'oversampling' else "Random Undersampling")
 
-        # Tampilkan dropdown antecedent populer (jika ada)
-        selected_antecedent = ""
-        if st.session_state.antecedents:
-            selected_antecedent = st.selectbox(
-                "Pilih antecedent populer (opsional):",
-                options=[""] + st.session_state.antecedents,
-            )
-
-        if selected_antecedent:
-            default_target_str = selected_antecedent
-        else:
-            default_target_str = ""
-
-        target_products_str = st.text_input(
-            "Masukkan Produk Target (pisahkan koma)", 
-            default_target_str
-        )
-        target_list = set(p.strip().upper() for p in target_products_str.split(',') if p)
-
-        # Pilihan metode resampling
-        resampling_method = st.selectbox(
-            "Metode Resampling Data Latih:",
-            options=['undersampling', 'oversampling'],
-            index=1,  # default SMOTE
-            format_func=lambda x: "SMOTE (Oversampling)" if x == 'oversampling' else "Random (Undersampling)",
-            help="Oversampling (SMOTE) disarankan untuk data imbalance."
-        )
-
-        if st.button("TRAIN ANN MODEL", type="primary"):
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚀 Mulai Training Model", type="primary", use_container_width=True):
             if not target_list:
-                st.error("Harap tentukan Produk Target terlebih dahulu.")
+                st.error("Tentukan produk target terlebih dahulu!")
             else:
-                st.session_state.model = None
+                with st.spinner("🤖 Sedang melatih model (Pre-processing > Encoding > Training)..."):
+                    try:
+                        df = st.session_state.data
+                        p_col = st.session_state.product_list_col
+                        d_feats = st.session_state.demo_features
+                        
+                        data_ann = pp.convert_product_list(df.copy(), p_col)
+                        data_target = pp.create_target_variable(data_ann, p_col, target_list)
+                        data_enc = pp.encode_features(data_target, d_feats)
 
-                # 1. Konversi product list
-                with st.spinner(f"Mengonversi kolom '{product_list_col}'..."):
-                    data_processed_ann = pp.convert_product_list(df.copy(), product_list_col)
+                        y_full = data_enc['PX']
+                        orig_cols = set(data_target.columns)
+                        final_cols = set(data_enc.columns)
+                        X_full = data_enc[list(final_cols - orig_cols)].copy() 
 
-                # 2. Buat variabel target PX
-                with st.spinner(f"Membuat variabel target 'PX' untuk {target_products_str}..."):
-                    data_with_target = pp.create_target_variable(
-                        data_processed_ann, product_list_col, target_list
-                    )
+                        st.session_state.X_full = X_full
+                        st.session_state.full_keys = data_enc[[st.session_state.key_col, p_col, 'PX']]
 
-                # 3. Encode fitur demografi
-                with st.spinner("Melakukan encoding fitur demografi..."):
-                    original_cols = set(data_with_target.columns)
-                    data_encoded = pp.encode_features(data_with_target, demo_features)
+                        X_train, y_train, X_test, y_test = mu.split_and_resample(X_full, y_full, method=resample)
+                        
+                        with st.expander("Lihat Distribusi Data Training"):
+                            st.write("Target Distribution (Train):", y_train.value_counts())
+                        
+                        model = mu.train_ann_model(X_train, y_train)
+                        st.session_state.model = model
+                        st.session_state.eval_metrics = mu.generate_evaluation_metrics(model, X_test, y_test)
+                        
+                        probs, preds = mu.get_predictions(model, X_full)
+                        res_df = st.session_state.full_keys.copy()
+                        res_df['Probability'] = probs
+                        res_df['Prediction'] = preds
+                        st.session_state.prediction_results = res_df
+                        
+                        st.success("✅ Training Selesai! Lihat hasil detail di menu 'Prediction Results'.")
+                        
+                    except Exception as e:
+                        st.error(f"Gagal training: {e}")
 
-                    y_data = data_encoded['PX']
-                    encoded_cols = set(data_encoded.columns)
-                    new_encoded_features = list(encoded_cols - original_cols)
+# --- PAGE 4: RESULTS ---
+elif selected_page == "Prediction Results":
+    st.markdown('<div class="main-header">📈 Model Evaluation & Results</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Analisis performa model dan hasil prediksi pada seluruh pelanggan.</div>', unsafe_allow_html=True)
 
-                    if not new_encoded_features:
-                        st.error("Tidak ada fitur demografi yang di-encode. Model tidak bisa dilatih.")
-                        st.stop()
-
-                    X_data = data_encoded[new_encoded_features].copy()
-
-                    st.session_state.X_full = X_data
-                    st.session_state.y_full = y_data
-                    st.session_state.full_data_with_keys = data_encoded[[key_col, product_list_col, 'PX']]
-
-                # 4. Train-test split & resampling
-                with st.spinner("Melakukan Train-Test Split dan Resampling..."):
-                    X_train, y_train, X_test, y_test = mu.split_and_resample(
-                        st.session_state.X_full, 
-                        st.session_state.y_full,
-                        method=resampling_method
-                    )
-                    st.session_state.X_test = X_test
-                    st.session_state.y_test = y_test
-
-                    st.subheader("Info Debugging (Setelah Resampling)")
-                    st.write("Distribusi Y_Train (Data Latih - Setelah Resampling):")
-                    st.dataframe(pd.DataFrame(y_train.value_counts(), columns=["count"]))
-                    st.write("Distribusi Y_Test (Data Uji - Asli/Imbalanced):")
-                    st.dataframe(pd.DataFrame(y_test.value_counts(), columns=["count"]))
-                    st.write("Contoh X_Train:")
-                    st.dataframe(X_train.head())
-
-                # 5. Latih model ANN
-                with st.spinner("MELATIH MODEL ANN... (Bisa memakan waktu)"):
-                    start_time = time.time()
-                    model = mu.train_ann_model(X_train, y_train)
-                    end_time = time.time()
-
-                    st.session_state.model = model
-                    st.success(f"Pelatihan ANN selesai dalam {end_time - start_time:.2f} detik.")
-
-                # 6. Evaluasi model pada test set
-                with st.spinner("Menghasilkan metrik evaluasi..."):
-                    st.session_state.eval_metrics = mu.generate_evaluation_metrics(
-                        model, 
-                        st.session_state.X_test, 
-                        st.session_state.y_test
-                    )
-
-                # 7. Prediksi ke seluruh data
-                with st.spinner("Membuat prediksi untuk semua data..."):
-                    full_probs, full_preds = mu.get_predictions(
-                        model, 
-                        st.session_state.X_full
-                    )
-
-                    results_df = st.session_state.full_data_with_keys.copy()
-                    results_df['Probabilitas_Beli_PX'] = full_probs
-                    results_df['Prediksi_Beli_PX'] = full_preds
-                    st.session_state.prediction_results = results_df
-
-                st.success("Pelatihan ANN dan Prediksi Selesai! Lihat halaman 'Lihat Hasil Prediksi'.")
-
-
-elif page == "results":
-    st.header("Hasil Prediksi ANN")
-    if 'model' not in st.session_state or st.session_state.model is None:
-        st.info("Model belum dilatih, Silakan latih terlkebih dahulu")
+    if not st.session_state.model:
+        st.info("⚠️ Model belum dilatih. Silakan ke menu ANN Training.")
     else:
-        eval_data = st.session_state.eval_metrics
+        evals = st.session_state.eval_metrics
+        
+        m1, m2 = st.columns(2)
+        m1.metric("AUC-ROC Score", f"{evals['auc']:.4f}")
+        m2.metric("Accuracy (Test Set)", f"{evals['report']['accuracy']:.4f}" if 'accuracy' in evals['report'] else "N/A")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("AUC-ROC Score", f"{eval_data['auc']:.4f}")
-            st.subheader("Classification Report (Test Set)")
-            st.dataframe(pd.DataFrame(eval_data['report']).transpose())
+        c1, c2 = st.columns(2)
+        with c1:
+            with st.container(border=True):
+                st.markdown("**Confusion Matrix**")
+                st.pyplot(evals['cm_plot'], use_container_width=True)
+        with c2:
+            with st.container(border=True):
+                st.markdown("**ROC Curve**")
+                st.pyplot(evals['roc_plot'], use_container_width=True)
 
-        with col2:
-            st.subheader("Confusion Matrix (Test Set)")
-            st.pyplot(eval_data['cm_plot'])
+        st.markdown("### 📋 Hasil Prediksi Pelanggan")
+        res_df = st.session_state.prediction_results
+        st.dataframe(res_df, use_container_width=True)
 
-        st.subheader("ROC Curve (Test Set)")
-        st.pyplot(eval_data['roc_plot'])
+        csv = res_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Hasil (CSV)",
+            data=csv,
+            file_name="hasil_prediksi_ann.csv",
+            mime="text/csv",
+            type="primary"
+        )
+        
+# --- PAGE 5: BUSINESS INSIGHTS ---
+elif selected_page == "Business Insights":
+    st.markdown('<div class="main-header">💡 Strategic Business Insights</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Gabungan kekuatan pola MBA dan presisi prediksi ANN untuk strategi pemasaran.</div>', unsafe_allow_html=True)
 
-        st.subheader("Prediksi ANN pada Keseluruhan Data")
-        st.dataframe(st.session_state.prediction_results)
+    if not st.session_state.association_rules is not None:
+        st.warning("⚠️ Harap jalankan 'Association Rules' terlebih dahulu.")
+    elif not 'prediction_results' in st.session_state:
+        st.warning("⚠️ Harap jalankan 'ANN Training' terlebih dahulu.")
+    else:
+        # --- 0. PREPARE DATA (DEDUPLIKASI DI AWAL) ---
+        # Kita buat dataframe level 'Customer' (Unik), bukan Transaksi
+        raw_df = st.session_state.prediction_results
+        key_col = st.session_state.key_col
+        
+        # Ambil probabilitas tertinggi per customer
+        unique_customers_df = raw_df.sort_values(by='Probability', ascending=False).drop_duplicates(subset=[key_col], keep='first')
+        
+        # --- 1. AI SMART CONCLUSION ---
+        st.markdown("### 🧠 AI Smart Conclusion")
+        
+        # Ambil Top Profile dari data UNIK
+        hot_leads_unique = unique_customers_df[unique_customers_df['Probability'] > 0.75]
+        
+        insight_box_content = []
+        
+        # Insight Demografi (Dari user unik)
+        original_df = st.session_state.data
+        if not hot_leads_unique.empty and st.session_state.demo_features:
+            # Kita perlu merge data demografi asli ke list unik ini
+            # Karena prediction_results mungkin tidak menyimpan semua kolom demografi
+            hot_ids = hot_leads_unique[key_col].unique()
+            profile_data = original_df[original_df[key_col].isin(hot_ids)]
+            
+            dom_traits = []
+            for feature in st.session_state.demo_features[:3]:
+                if feature in profile_data.columns:
+                    try:
+                        top_val = profile_data[feature].mode()[0]
+                        clean_feat = feature.replace('_', ' ').title()
+                        dom_traits.append(f"<b>{clean_feat} {top_val}</b>")
+                    except:
+                        pass # Handle jika mode kosong
+            
+            if dom_traits:
+                traits_str = ", ".join(dom_traits)
+                insight_box_content.append(f"🎯 <b>Profil Target Utama:</b> Pelanggan prioritas memiliki profil dominan {traits_str}.")
 
-        @st.cache_data
-        def convert_df_to_csv(_df):
-            return _df.to_csv(index=False).encode('utf-8')
+        # Insight Pola Belanja
+        rules = st.session_state.association_rules
+        if rules is not None and not rules.empty:
+            top_rule = rules.sort_values(by='lift', ascending=False).iloc[0]
+            ant = top_rule['antecedents_str']
+            con = top_rule['consequents_str']
+            lift = top_rule['lift']
+            insight_box_content.append(f"🛒 <b>Pola Pemicu:</b> Promosi produk <b>{ant}</b> sangat efektif memicu pembelian <b>{con}</b> (Lift: {lift:.1f}x).")
 
-        if st.session_state.prediction_results is not None:
-            csv_data = convert_df_to_csv(st.session_state.prediction_results)
-            st.download_button(
-                label="📥 Download Hasil Prediksi (CSV)",
-                data=csv_data,
-                file_name="prediksi_live_model.csv",
-                mime="text/csv",
-            )
+        insight_box_content.append(f"🚀 <b>Strategi:</b> Fokuskan budget marketing pada {len(hot_leads_unique)} pelanggan unik di bawah ini.")
+
+        html_content = "<br><br>".join(insight_box_content)
+        st.markdown(f"""
+        <div style="background-color: #f0f9ff; border-left: 6px solid #2e7bcf; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); font-size: 16px; color: #334155; margin-bottom: 30px;">
+            <h3 style="margin-top:0; color:#2e7bcf;">✨ Kesimpulan Strategis</h3>
+            {html_content}
+        </div>
+        """, unsafe_allow_html=True)
+
+        # --- 2. EXECUTIVE METRICS (DATA UNIK) ---
+        auc_score = st.session_state.eval_metrics['auc']
+        
+        # Hitung jumlah Hot Leads UNIK (Orang), bukan Transaksi
+        hot_leads_count = len(hot_leads_unique)
+        total_unique_customers = len(unique_customers_df)
+        hot_leads_pct = (hot_leads_count / total_unique_customers * 100) if total_unique_customers > 0 else 0
+            
+        max_lift = rules['lift'].max() if not rules.empty else 0
+
+        # Status Logic
+        if auc_score > 0.75 and hot_leads_count > 10:
+            verdict = "STRATEGI SANGAT POTENSIAL (GO)"
+            status_color = "green"
+        elif auc_score < 0.6:
+            verdict = "MODEL KURANG AKURAT (NO GO)"
+            status_color = "red"
+        else:
+            verdict = "CUKUP POTENSIAL (CAUTION)"
+            status_color = "orange"
+
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Kualitas Prediksi (AUC)", f"{auc_score:.2f}", delta="Akurasi Model")
+        # Metric ini sekarang menampilkan jumlah ORANG
+        m2.metric("Hot Leads (Pelanggan Unik)", f"{hot_leads_count} Org", f"{hot_leads_pct:.1f}% dari Total Pelanggan")
+        m3.metric("Kekuatan Pola (Max Lift)", f"{max_lift:.2f}x", delta="Daya Tarik Produk")
+        
+        st.markdown(f"<div style='text-align:center; color:{status_color}; font-weight:bold; margin-bottom:20px;'>STATUS: {verdict}</div>", unsafe_allow_html=True)
+
+        # --- 3. VISUALIZATIONS ---
+        c1, c2 = st.columns([1, 1], gap="large")
+        
+        with c1:
+            st.markdown("### 📊 Pemicu Produk (Top Rules)")
+            top_rules = rules.sort_values(by="lift", ascending=False).head(8)
+            chart_data = top_rules[['antecedents_str', 'lift']].copy()
+            chart_data['Rule'] = chart_data['antecedents_str'] + " ➡️ " + top_rules['consequents_str']
+            st.bar_chart(chart_data.set_index('Rule')['lift'], color="#2e7bcf")
+
+        with c2:
+            st.markdown("### 👥 Segmentasi Pelanggan (Unik)")
+            # Hitung segmentasi berdasarkan data UNIK
+            conditions = [
+                (unique_customers_df['Probability'] >= 0.8),
+                (unique_customers_df['Probability'] >= 0.5) & (unique_customers_df['Probability'] < 0.8),
+                (unique_customers_df['Probability'] < 0.5)
+            ]
+            choices = ['🔥 Hot Leads', '☁️ Warm', '❄️ Cold']
+            unique_customers_df['Segment'] = np.select(conditions, choices, default='Unknown')
+            
+            segment_counts = unique_customers_df['Segment'].value_counts().reset_index()
+            segment_counts.columns = ['Segment', 'Jumlah Orang']
+            st.bar_chart(segment_counts.set_index('Segment'), color="#ffb703")
+
+        # --- 4. ACTION PLAN TABLE ---
+        st.markdown("---")
+        st.markdown("### 🚀 Daftar Target Prioritas (Top 50 Unik)")
+        
+        # Ambil Top 50 dari data unik yang sudah disiapkan
+        top_targets = unique_customers_df.head(50)
+        
+        # Merge kembali demografi untuk ditampilkan di tabel
+        desired_cols = [key_col, 'Probability', 'Segment']
+        if st.session_state.demo_features:
+            # Ambil data demografi unik
+            demo_data = original_df[[key_col] + st.session_state.demo_features].drop_duplicates(subset=[key_col])
+            # Merge left ke top_targets
+            top_targets_final = top_targets.merge(demo_data, on=key_col, how='left')
+            
+            # Update kolom yang mau ditampilkan
+            available_demo = [c for c in st.session_state.demo_features if c in top_targets_final.columns]
+            desired_cols += available_demo[:3]
+        else:
+            top_targets_final = top_targets
+
+        valid_cols = [c for c in desired_cols if c in top_targets_final.columns]
+        
+        st.dataframe(
+            top_targets_final[valid_cols].style.background_gradient(subset=['Probability'], cmap='Blues'),
+            use_container_width=True
+        )
+        
+        csv = top_targets_final[valid_cols].to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download List Marketing", csv, "target_marketing.csv", "text/csv", type="primary")

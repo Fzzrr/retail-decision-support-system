@@ -1,0 +1,22 @@
+[theme]
+# Memaksa mode terang (Light Mode)
+base = "light"
+
+# Warna Utama (Tombol, Checkbox, Highlight) - Biru Tema Anda
+primaryColor = "#2e7bcf"
+
+# Warna Latar Belakang Utama (Area Konten) - Abu-abu muda soft
+backgroundColor = "#eff2f6"
+
+# Warna Latar Belakang Sidebar - Putih Bersih
+secondaryBackgroundColor = "#ffffff"
+
+# Warna Teks - Hitam Kebiruan (Agar kontras & mudah dibaca)
+textColor = "#31333F"
+
+# Font tulisan (Opsional, agar terlihat modern)
+font = "sans serif"
+
+[server]
+# Menghilangkan hamburger menu (garis tiga) jika ingin tampilan bersih (opsional)
+# headless = true

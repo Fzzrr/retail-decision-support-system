@@ -107,30 +107,40 @@ def generate_evaluation_metrics(_model, X_test, y_test):
     try:
         results['report'] = classification_report(y_test, preds, output_dict=True)
     except Exception:
-        results['report'] = {"error": "Gagal membuat report, cek distribusi Y_test."}
+        results['report'] = {"error": "Gagal membuat report."}
 
     try:
         results['auc'] = roc_auc_score(y_test, probs)
     except Exception:
         results['auc'] = 0.0
 
-    fig_cm, ax_cm = plt.subplots()
-    ConfusionMatrixDisplay.from_predictions(y_test, preds, ax=ax_cm, cmap=plt.cm.Blues)
+    # --- PERBAIKAN UKURAN GAMBAR (FIXED SIZE) ---
+    plot_size = (6, 5) # Lebar 6, Tinggi 5 (Seragamkan!)
+
+    # 1. Plot Confusion Matrix
+    fig_cm, ax_cm = plt.subplots(figsize=plot_size)
+    ConfusionMatrixDisplay.from_predictions(y_test, preds, ax=ax_cm, cmap=plt.cm.Blues, colorbar=True)
     ax_cm.set_title("Confusion Matrix (Test Set)")
+    # Agar layout pas dan tidak terpotong
+    fig_cm.tight_layout()
     results['cm_plot'] = fig_cm
 
-    fig_roc, ax_roc = plt.subplots()
+    # 2. Plot ROC Curve
+    fig_roc, ax_roc = plt.subplots(figsize=plot_size)
     try:
         fpr, tpr, _ = roc_curve(y_test, probs)
-        ax_roc.plot(fpr, tpr, label=f"AUC = {results['auc']:.4f}")
+        ax_roc.plot(fpr, tpr, label=f"AUC = {results['auc']:.4f}", color='#2e7bcf', linewidth=2)
     except Exception:
-        ax_roc.text(0.5, 0.5, "Gagal membuat ROC", ha='center')
+        ax_roc.text(0.5, 0.5, "Gagal ROC", ha='center')
 
     ax_roc.plot([0, 1], [0, 1], linestyle='--', color='gray', label='Random')
     ax_roc.set_xlabel('False Positive Rate')
     ax_roc.set_ylabel('True Positive Rate')
     ax_roc.set_title('ROC Curve (Test Set)')
-    ax_roc.legend()
+    ax_roc.legend(loc="lower right")
+    ax_roc.grid(True, alpha=0.3)
+    # Agar layout pas
+    fig_roc.tight_layout() 
     results['roc_plot'] = fig_roc
 
     return results
