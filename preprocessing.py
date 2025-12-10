@@ -123,15 +123,21 @@ def run_association_rules(_df, product_list_col, min_support=0.01):
 
 def create_target_variable(df, product_list_col, target_product_list):
     """
-    Membuat variabel target 'PX' (1 jika beli target, 0 jika tidak).
-    Menggunakan himpunan (set) agar pencarian SANGAT CEPAT.
+    Membuat variabel target 'PX' dengan PENGAMAN TIPE DATA.
     """
+    # Menggunakan set() untuk pencarian yang jauh lebih cepat
     target_set = set(target_product_list)
     
     def check_target(cart_items):
+        # --- PENGAMAN (SAFETY CHECK) ---
+        # Jika data BUKAN list (misal: angka, atau kosong), anggap tidak beli (0)
+        if not isinstance(cart_items, (list, set, tuple)):
+            return 0
+            
         # Cek apakah target_set ada di dalam keranjang belanja ini
         return 1 if target_set.issubset(set(cart_items)) else 0
     
+    # Terapkan fungsi dengan aman
     df['PX'] = df[product_list_col].apply(check_target)
     return df
 
