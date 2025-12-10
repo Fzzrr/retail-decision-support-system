@@ -1,0 +1,7 @@
+# Mengabaikan file sistem dan sampah
+
+__pycache__/
+*.pyc
+
+# Mengabaikan file penting
+.env
