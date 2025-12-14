@@ -1,0 +1,13 @@
+# Mengabaikan file sistem dan sampah
+
+__pycache__/
+*.pyc
+
+# Mengabaikan file penting
+.env
+
+# Mengabaikan file basis data SQLite
+datasets/retail.db  
+datasets/transaction_data.csv
+datasets/product.csv
+datasets/hh_demographics.csv
