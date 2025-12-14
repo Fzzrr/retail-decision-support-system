@@ -4,4 +4,14 @@ __pycache__/
 *.pyc
 
 # Mengabaikan file penting
+<<<<<<< HEAD
 .env
+=======
+.env
+
+# Mengabaikan file basis data SQLite
+datasets/retail.db  
+datasets/transaction_data.csv
+datasets/product.csv
+datasets/hh_demographics.csv
+>>>>>>> repo-bim-dss/main
